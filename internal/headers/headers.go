@@ -3,6 +3,7 @@ package headers
 import (
 	"bytes"
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -27,18 +28,67 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 
 	headerText := string(data[:idx])
 	headerParts := strings.SplitN(headerText, ":", 2)
-	headerName := headerParts[0]
+	headerName := strings.ToLower(headerParts[0])
 	if headerName != strings.TrimRight(headerName, " ") {
 		return 0, false, fmt.Errorf("invalid header name: %s", headerName)
 	}
 
 	headerValue := strings.TrimSpace(headerParts[1])
 	headerName = strings.TrimSpace(headerName)
-
+	if !validTokens([]byte(headerName)) {
+		return 0, false, fmt.Errorf("invalid header token found: %s", headerName)
+	}
 	h.Set(headerName, headerValue)
 	return idx + len(crlf), false, nil
 }
 
 func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
+	v, ok := h[key]
+	if ok {
+		value = strings.Join([]string{
+			v,
+			value,
+		}, ", ")
+	}
 	h[key] = value
+}
+
+func (h Headers) Get(key string) (string, bool) {
+	key = strings.ToLower(key)
+	v, ok := h[key]
+	return v, ok
+}
+
+func (h Headers) Override(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
+}
+
+func (h Headers) Remove(key string) {
+	key = strings.ToLower(key)
+	delete(h, key)
+}
+
+var tokenChars = []byte{'!', '#', '$', '%', '&', '\'', '*', '+', '-', '.', '^', '_', '`', '|', '~'}
+
+// validTokens checks if the data contains only valid tokens
+// or characters that are allowed in a token
+func validTokens(data []byte) bool {
+	for _, c := range data {
+		if !isTokenChar(c) {
+			return false
+		}
+	}
+	return true
+}
+
+func isTokenChar(c byte) bool {
+	if c >= 'A' && c <= 'Z' ||
+		c >= 'a' && c <= 'z' ||
+		c >= '0' && c <= '9' {
+		return true
+	}
+
+	return slices.Contains(tokenChars, c)
 }
